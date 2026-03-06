@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+@using BlazorClaw.Server.Data
+@using Microsoft.AspNetCore.Identity
+
+@inject IHttpContextAccessor httpContextAccessor
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+
+<div class="page">
+    <AuthorizeView>
+        <Authorized>
+            <div class="sidebar">
+                <NavMenu />
+            </div>
+        </Authorized>
+    </AuthorizeView>
+
+    <main>
+        <div class="top-row px-4">
+            <AuthorizeView>
+                <Authorized>
+                    <a class="me-3 text-decoration-none" href="Account/Manage">@context.User.Identity?.Name</a>
+                    <a href="Account/Logout" title="Logout">
+                        <i class="bi bi-arrow-bar-right"></i>
+                    </a>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>

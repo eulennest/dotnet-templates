@@ -1,0 +1,162 @@
+@page "/Account/Login"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using BlazorClaw.Server.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject ILogger<Login> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+@inject AuthenticationStateProvider AuthState
+@inject IConfiguration configuration
+
+
+<PageTitle>Login - BlazorClaw</PageTitle>
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-10 col-lg-6 col-xxl-5">
+            <div class="card shadow-lg">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <h1 class="display-4">🦉</h1>
+                        <h2>BlazorClaw</h2>
+                        <p class="text-muted">Agent Host Dashboard</p>
+                    </div>
+
+                    <StatusMessage Message="@errorMessage" />
+                    <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" role="alert" />
+                        <div class="form-floating mb-3">
+                            <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                            <label for="email" class="form-label">Email</label>
+                            <ValidationMessage For="() => Input.Email" class="text-danger" />
+                        </div>
+                        <div class="form-floating mb-3">
+                            <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
+                            <label for="password" class="form-label">Password</label>
+                            <ValidationMessage For="() => Input.Password" class="text-danger" />
+                        </div>
+                        <div class="checkbox mb-3">
+                            <label class="form-label">
+                                <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
+                                Remember me
+                            </label>
+                        </div>
+                        <div>
+                            <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+                        </div>
+                        <div class="mt-3">
+                            <p>
+                                <a href="Account/ForgotPassword">Forgot your password?</a>
+                            </p>
+                            <p>
+                                <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Register as a new user</a>
+                            </p>
+                            <p>
+                                <a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
+                            </p>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+            @if (externalLoginsCount > 0)
+            {
+                <div class="card mt-4">
+                    <div class="card-body">
+                        <h3>Use another service</h3>
+                        <ExternalLoginPicker />
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? errorMessage;
+    private int externalLoginsCount;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            AuthenticationState authState = await AuthState.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user is not null
+                && user.Identity is not null
+                && user.Identity.IsAuthenticated)
+            {
+                await SignInManager.SignOutAsync();
+                NavigationManager.NavigateTo("/");
+                await base.OnInitializedAsync();
+            }
+        }
+        externalLoginsCount = (await SignInManager.GetExternalAuthenticationSchemesAsync()).Count();
+    }
+
+    public async Task LoginUser()
+    {
+        // This doesn't count login failures towards account lockout
+        // To enable password failures to trigger account lockout, set lockoutOnFailure: true
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        if (result.Succeeded)
+        {
+            var user = await UserManager.FindByEmailAsync(Input.Email);
+            Logger.LogInformation($"User {user?.UserName} logged in.");
+
+            var adminPassword = configuration["Database:DefaultAdminPassword"] ?? "Admin123!";
+            if (adminPassword.Equals(Input.Password))
+            {
+                RedirectManager.RedirectTo("/Account/Manage/ChangePassword");
+            }
+            else
+            {
+                RedirectManager.RedirectTo(ReturnUrl);
+            }
+        }
+        else if (result.RequiresTwoFactor)
+        {
+            RedirectManager.RedirectTo(
+                "Account/LoginWith2fa",
+                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else
+        {
+            errorMessage = "Error: Invalid login attempt.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
+    }
+}
