@@ -1,0 +1,8 @@
+*.user
+*.lock
+bin/
+obj/
+.vs/
+appsettings.*.json
+!appsettings.json
+.DS_Store
